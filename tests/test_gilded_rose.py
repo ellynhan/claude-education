@@ -1,5 +1,8 @@
 import pytest
-from gilded_rose import Item, GildedRose
+from gilded_rose import (
+    Item, GildedRose,
+    ItemUpdaterRegistry, NormalItemUpdater, AgedBrieUpdater, SulfurasUpdater,
+)
 
 
 def _make_gilded_rose(name, sell_in, quality):
@@ -180,3 +183,83 @@ class TestItemRepr:
     def test_repr(self):
         item = Item("foo", 5, 10)
         assert repr(item) == "foo, 5, 10"
+
+
+# ---------------------------------------------------------------------------
+# Phase 3-6: Conjured 아이템
+# ---------------------------------------------------------------------------
+
+class TestConjuredItem:
+    NAME = "Conjured Mana Cake"
+
+    def _run(self, sell_in, quality, times=1):
+        gr, item = _make_gilded_rose(self.NAME, sell_in, quality)
+        for _ in range(times):
+            gr.update_quality()
+        return item
+
+    def test_quality_decreases_by_two(self):
+        item = self._run(sell_in=5, quality=10)
+        assert item.quality == 8
+
+    def test_quality_decreases_by_four_after_sell_by(self):
+        item = self._run(sell_in=0, quality=10)
+        assert item.quality == 6
+
+    def test_quality_never_negative(self):
+        item = self._run(sell_in=5, quality=1)
+        assert item.quality == 0
+
+    def test_quality_never_negative_after_sell_by(self):
+        item = self._run(sell_in=0, quality=3)
+        assert item.quality == 0
+
+    def test_sell_in_decreases(self):
+        item = self._run(sell_in=5, quality=10)
+        assert item.sell_in == 4
+
+
+# ---------------------------------------------------------------------------
+# Phase 3-6: ItemUpdaterRegistry
+# ---------------------------------------------------------------------------
+
+class TestItemUpdaterRegistry:
+    def test_returns_normal_updater_for_unknown_item(self):
+        registry = ItemUpdaterRegistry()
+        updater = registry.get_updater("unknown item")
+        assert isinstance(updater, NormalItemUpdater)
+
+    def test_returns_registered_updater(self):
+        registry = ItemUpdaterRegistry()
+        custom = AgedBrieUpdater()
+        registry.register("Test Item", custom)
+        assert registry.get_updater("Test Item") is custom
+
+    def test_registered_updater_overrides_default(self):
+        registry = ItemUpdaterRegistry()
+        registry.register("special", SulfurasUpdater())
+        items = [Item("special", 5, 10)]
+        gr = GildedRose(items, registry=registry)
+        gr.update_quality()
+        assert items[0].sell_in == 5
+        assert items[0].quality == 10
+
+
+# ---------------------------------------------------------------------------
+# Phase 3-6: GildedRose + 커스텀 Registry DI
+# ---------------------------------------------------------------------------
+
+class TestGildedRoseWithCustomRegistry:
+    def test_custom_registry_is_used(self):
+        registry = ItemUpdaterRegistry()
+        registry.register("Aged Brie", NormalItemUpdater())
+        items = [Item("Aged Brie", 5, 20)]
+        gr = GildedRose(items, registry=registry)
+        gr.update_quality()
+        assert items[0].quality == 19
+
+    def test_default_registry_used_when_none_passed(self):
+        items = [Item("Aged Brie", 5, 20)]
+        gr = GildedRose(items)
+        gr.update_quality()
+        assert items[0].quality == 21

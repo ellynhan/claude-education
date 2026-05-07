@@ -84,8 +84,6 @@ _default_registry = ItemUpdaterRegistry()
 _default_registry.register("Aged Brie",                                AgedBrieUpdater())
 _default_registry.register("Sulfuras, Hand of Ragnaros",               SulfurasUpdater())
 _default_registry.register("Backstage passes to a TAFKAL80ETC concert", BackstagePassUpdater())
-# Conjured 아이템이 정식 도입될 때 아래 한 줄을 활성화:
-# _default_registry.register_predicate(lambda n: n.startswith("Conjured"), ConjuredItemUpdater())
 
 
 class GildedRose:

@@ -1,43 +1,45 @@
-_AGED_BRIE        = "Aged Brie"
-_SULFURAS         = "Sulfuras, Hand of Ragnaros"
-_BACKSTAGE_PASSES = "Backstage passes to a TAFKAL80ETC concert"
-
-_MAX_QUALITY = 50
-_MIN_QUALITY = 0
+from abc import ABC, abstractmethod
+from typing import Callable
 
 
-class GildedRose(object):
-    def __init__(self, items):
-        self.items = items
+class ItemUpdater(ABC):
+    MAX_QUALITY = 50
+    MIN_QUALITY = 0
 
-    def _is_sulfuras(self, item) -> bool:
-        return item.name == _SULFURAS
-
-    def _is_aged_brie(self, item) -> bool:
-        return item.name == _AGED_BRIE
-
-    def _is_backstage_pass(self, item) -> bool:
-        return item.name == _BACKSTAGE_PASSES
+    @abstractmethod
+    def update(self, item) -> None:
+        ...
 
     def _increase_quality(self, item, amount: int = 1) -> None:
-        item.quality = min(item.quality + amount, _MAX_QUALITY)
+        item.quality = min(item.quality + amount, self.MAX_QUALITY)
 
     def _decrease_quality(self, item, amount: int = 1) -> None:
-        item.quality = max(item.quality - amount, _MIN_QUALITY)
+        item.quality = max(item.quality - amount, self.MIN_QUALITY)
 
-    def _update_normal_item(self, item) -> None:
+
+class NormalItemUpdater(ItemUpdater):
+    def update(self, item) -> None:
         self._decrease_quality(item)
         item.sell_in -= 1
         if item.sell_in < 0:
             self._decrease_quality(item)
 
-    def _update_aged_brie(self, item) -> None:
+
+class AgedBrieUpdater(ItemUpdater):
+    def update(self, item) -> None:
         self._increase_quality(item)
         item.sell_in -= 1
         if item.sell_in < 0:
             self._increase_quality(item)
 
-    def _update_backstage_pass(self, item) -> None:
+
+class SulfurasUpdater(ItemUpdater):
+    def update(self, item) -> None:
+        pass
+
+
+class BackstagePassUpdater(ItemUpdater):
+    def update(self, item) -> None:
         if item.sell_in > 10:
             self._increase_quality(item, 1)
         elif item.sell_in > 5:
@@ -46,18 +48,53 @@ class GildedRose(object):
             self._increase_quality(item, 3)
         item.sell_in -= 1
         if item.sell_in < 0:
-            item.quality = _MIN_QUALITY
+            item.quality = self.MIN_QUALITY
+
+
+class ConjuredItemUpdater(ItemUpdater):
+    def update(self, item) -> None:
+        self._decrease_quality(item, 2)
+        item.sell_in -= 1
+        if item.sell_in < 0:
+            self._decrease_quality(item, 2)
+
+
+class ItemUpdaterRegistry:
+    def __init__(self) -> None:
+        self._exact: dict[str, ItemUpdater] = {}
+        self._predicates: list[tuple[Callable[[str], bool], ItemUpdater]] = []
+        self._default: ItemUpdater = NormalItemUpdater()
+
+    def register(self, name: str, updater: ItemUpdater) -> None:
+        self._exact[name] = updater
+
+    def register_predicate(self, predicate: Callable[[str], bool], updater: ItemUpdater) -> None:
+        self._predicates.append((predicate, updater))
+
+    def get_updater(self, name: str) -> ItemUpdater:
+        if name in self._exact:
+            return self._exact[name]
+        for predicate, updater in self._predicates:
+            if predicate(name):
+                return updater
+        return self._default
+
+
+_default_registry = ItemUpdaterRegistry()
+_default_registry.register("Aged Brie",                                AgedBrieUpdater())
+_default_registry.register("Sulfuras, Hand of Ragnaros",               SulfurasUpdater())
+_default_registry.register("Backstage passes to a TAFKAL80ETC concert", BackstagePassUpdater())
+
+
+class GildedRose:
+    def __init__(self, items, registry: ItemUpdaterRegistry = None) -> None:
+        self.items = items
+        self._registry = registry if registry is not None else _default_registry
 
     def update_quality(self) -> None:
         for item in self.items:
-            if self._is_sulfuras(item):
-                continue
-            if self._is_aged_brie(item):
-                self._update_aged_brie(item)
-            elif self._is_backstage_pass(item):
-                self._update_backstage_pass(item)
-            else:
-                self._update_normal_item(item)
+            updater = self._registry.get_updater(item.name)
+            updater.update(item)
 
 
 class Item:

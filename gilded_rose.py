@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Callable
 
 
 class ItemUpdater(ABC):
@@ -60,21 +61,31 @@ class ConjuredItemUpdater(ItemUpdater):
 
 class ItemUpdaterRegistry:
     def __init__(self) -> None:
-        self._registry: dict[str, ItemUpdater] = {}
+        self._exact: dict[str, ItemUpdater] = {}
+        self._predicates: list[tuple[Callable[[str], bool], ItemUpdater]] = []
         self._default: ItemUpdater = NormalItemUpdater()
 
     def register(self, name: str, updater: ItemUpdater) -> None:
-        self._registry[name] = updater
+        self._exact[name] = updater
+
+    def register_predicate(self, predicate: Callable[[str], bool], updater: ItemUpdater) -> None:
+        self._predicates.append((predicate, updater))
 
     def get_updater(self, name: str) -> ItemUpdater:
-        return self._registry.get(name, self._default)
+        if name in self._exact:
+            return self._exact[name]
+        for predicate, updater in self._predicates:
+            if predicate(name):
+                return updater
+        return self._default
 
 
 _default_registry = ItemUpdaterRegistry()
 _default_registry.register("Aged Brie",                                AgedBrieUpdater())
 _default_registry.register("Sulfuras, Hand of Ragnaros",               SulfurasUpdater())
 _default_registry.register("Backstage passes to a TAFKAL80ETC concert", BackstagePassUpdater())
-_default_registry.register("Conjured Mana Cake",                        ConjuredItemUpdater())
+# Conjured 아이템이 정식 도입될 때 아래 한 줄을 활성화:
+# _default_registry.register_predicate(lambda n: n.startswith("Conjured"), ConjuredItemUpdater())
 
 
 class GildedRose:
